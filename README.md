@@ -7,22 +7,37 @@ Modular dashboard cards for Home Assistant, built for wall tablets and phones.
 
 Every card follows your Home Assistant theme and light/dark mode. A matching **KSH theme** is included: muted grey by day, true black at night.
 
-| Icons (dark) | Icons (light) |
+[![Open your Home Assistant instance and open the KSH Cards repository in the Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=thekiwismarthome&repository=ksh-cards&category=integration)
+[![Open your Home Assistant instance and start setting up KSH Cards.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ksh_cards)
+
+The first button opens this repository in your Home Assistant's community store, ready to download. After downloading and restarting, the second button adds the integration.
+
+## Example: weather dashboard
+
+The whole weather wall, built from separate KSH cards. Add, remove or rearrange any of them.
+
+![KSH weather dashboard, dark](docs/previews/weather-dashboard-dark.png)
+
+| Light | Portrait |
+|---|---|
+| ![KSH weather dashboard, light](docs/previews/weather-dashboard-light.png) | ![KSH weather dashboard, portrait](docs/previews/weather-dashboard-portrait.png) |
+
+Copy it from [`examples/weather-dashboard.yaml`](examples/weather-dashboard.yaml) and change the entity ids to yours.
+
+## Icon cards at a glance
+
+| Dark | Light |
 |---|---|
 | ![Icon cards, dark](docs/previews/icons-dark.png) | ![Icon cards, light](docs/previews/icons-light.png) |
 
-| Weather (dark) | Weather (light) |
-|---|---|
-| ![Weather cards, dark](docs/previews/weather-dark.png) | ![Weather cards, light](docs/previews/weather-light.png) |
-
 ## Install
 
-### Option 1: HACS (recommended)
+### Option 1: HACS / Marketplace (recommended)
 
-1. In HACS, open **⋮ → Custom repositories**, add `https://github.com/thekiwismarthome/ksh-cards` with type **Integration**, and click **Add**.
-2. Find **KSH Cards** in HACS and click **Download**.
+1. Click the **Open your Home Assistant instance** button above. Or, in HACS (the **Marketplace** on Home Assistant 2026.11 and later), add `https://github.com/thekiwismarthome/ksh-cards` as a custom repository with type **Integration**.
+2. Find **KSH Cards** and click **Download**.
 3. Restart Home Assistant.
-4. Go to **Settings → Devices & services → Add integration**, search for **KSH Cards** and add it.
+4. Click the **start setting up** button above, or go to **Settings → Devices & services → Add integration** and search for **KSH Cards**.
 5. Refresh your browser (or restart the Kiosk Satellite app). The cards appear in the card picker under **KSH**.
 
 The integration serves the cards from inside Home Assistant and loads them on every dashboard, so there are no Lovelace resources to add. HACS tells you when an update is available. To remove the cards, delete the integration and refresh.
@@ -123,7 +138,7 @@ charging_entity: binary_sensor.car_charging
 
 All weather cards also accept `title` and `transparent: true`. Weather entities that don't provide forecast attributes are subscribed to automatically.
 
-See [`examples/weather-view.yaml`](examples/weather-view.yaml) for a complete page.
+See [`examples/weather-dashboard.yaml`](examples/weather-dashboard.yaml) for the complete weather dashboard shown at the top.
 
 ### Rain radar notes
 

@@ -1,0 +1,55 @@
+# KSH weather dashboard: the full weather wall built from KSH cards.
+#
+# One wide section. On a 10" landscape tablet Home Assistant gives it 36 columns:
+#   left (12):  now, then the 7-day forecast
+#   right (24): next 24 hours / rain radar, then six tiles in a 3 × 2 grid
+# In portrait it becomes now + 7-day side by side, the forecast/radar card full width,
+# then the tiles. On a phone everything stacks. Fits a 1280 × 800 screen with the
+# Home Assistant header hidden (for example with kiosk mode).
+#
+# Paste into a dashboard: ⋮ → Edit dashboard → ⋮ → Raw configuration editor
+# (as one of the items under `views:`). Change the entity ids to yours, and
+# remove any card you don't need.
+title: Weather
+path: weather
+icon: mdi:weather-partly-cloudy
+type: sections
+max_columns: 3
+theme: KSH
+sections:
+  - type: grid
+    column_span: 3
+    cards:
+      - type: custom:ksh-weather-now-card
+        entity: weather.home
+        feels_like_entity: sensor.home_temperature_feels_like   # optional
+        aqi_entity: sensor.air_quality_index                     # optional
+        warnings_entity: sensor.weather_warnings                 # optional
+        grid_options: { columns: 12, rows: 6 }
+      - type: custom:ksh-forecast-radar-card
+        entity: weather.home
+        hours: 24
+        grid_options: { columns: 24, rows: 6 }
+      - type: custom:ksh-weather-daily-card
+        entity: weather.home
+        grid_options: { columns: 12, rows: 6 }
+      - type: custom:ksh-wind-card
+        entity: weather.home
+        gust_entity: sensor.home_wind_gust                       # optional
+        grid_options: { columns: 8, rows: 3 }
+      - type: custom:ksh-uv-card
+        entity: weather.home
+        peak_entity: sensor.uv_index_forecast                    # optional
+        grid_options: { columns: 8, rows: 3 }
+      - type: custom:ksh-humidity-card
+        entity: weather.home
+        grid_options: { columns: 8, rows: 3 }
+      - type: custom:ksh-pressure-card
+        entity: weather.home
+        grid_options: { columns: 8, rows: 3 }
+      - type: custom:ksh-sun-moon-card
+        entity: sun.sun
+        grid_options: { columns: 8, rows: 3 }
+      - type: custom:ksh-tides-card           # needs a tide sensor (e.g. NIWA Tides); remove if you don't have one
+        entity: sensor.local_tides
+        grid_options: { columns: 8, rows: 3 }
