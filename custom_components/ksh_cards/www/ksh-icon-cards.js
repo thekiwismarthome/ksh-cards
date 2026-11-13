@@ -405,3 +405,256 @@ for (const [key, type] of Object.entries(CARD_TYPES)) {
 }
 window.KshIconCards = { version: KSH_ICON_VERSION, icons: Object.keys(ICONS), types: CARD_TYPES };
 console.info(`%c KSH ICONS %c v${KSH_ICON_VERSION} · ${Object.keys(CARD_TYPES).length} cards `, 'background:#FFC46B;color:#000;font-weight:700', 'background:#111;color:#fff');
+
+/* ====================================================== intercom button
+ * ksh-intercom-card: a handset-and-waves button for Kiosk Satellite.
+ * The button shows this screen's intercom state; tapping it opens a popup
+ * listing the other kiosks. Tapping a kiosk calls it through Kiosk
+ * Satellite's own intercom (esphome.ks_<this>_intercom_call). The popup
+ * also offers hang up / answer / decline, do not disturb and volume.
+ *
+ * This screen is found from `kiosk:` in the card config, or from
+ * `?kiosk=<device>` in the dashboard address (as Kiosk Satellite opens it).
+ */
+const IC_IDLE = ['idle', 'ended', 'off', 'unavailable', 'unknown', 'none', ''];
+const icPhase = (s) => {
+  const v = String(s ?? '').trim().toLowerCase();
+  if (IC_IDLE.includes(v)) return 'idle';
+  if (/ring|incoming/.test(v)) return 'incoming';
+  if (/call|dial|outgoing|connect/.test(v)) return 'calling';
+  return 'talking';
+};
+const kslug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const INTERCOM_SVG = '<path d="M31 24c-4 0-8 4-8 8 0 25 21 46 46 46 4 0 8-4 8-8v-9l-14-6-7 7c-9-4-16-11-20-20l7-7-6-14Z"/>'
+  + '<g class="wv"><path d="M56 22a22 22 0 0 1 22 22"/><path class="w2" d="M56 10a34 34 0 0 1 34 34"/></g><path class="dnd" d="M16 84 84 16"/>';
+const IG = {
+  phone: '<path d="M6 3h4l2 5-2.5 1.5a11 11 0 0 0 5 5L16 12l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2Z"/>',
+  hang: '<path d="M3 15.5c5-5 13-5 18 0l-2.5 2.5-3.5-1.5v-2.5a10 10 0 0 0-6 0v2.5L5.5 18Z"/>',
+  tablet: '<rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="12" cy="17.5" r=".8"/>',
+  mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 16h10"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  vol: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/>',
+};
+const ig = (n) => `<svg class="ig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IG[n]}</svg>`;
+
+class KshIntercomCard extends HTMLElement {
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'kiosk', selector: { text: {} } },
+        { name: 'name', selector: { text: {} } },
+        { name: 'hide', selector: { text: {} } },
+        { name: 'show_dnd', selector: { boolean: {} } },
+        { name: 'show_volume', selector: { boolean: {} } },
+        { name: 'close_on_call', selector: { boolean: {} } },
+        { name: 'click_sound', selector: { boolean: {} } },
+      ],
+      computeLabel: (s) => ({
+        kiosk: 'This screen (blank = from ?kiosk= in the address)', name: 'Name', hide: 'Kiosks to hide (comma separated)',
+        show_dnd: 'Show Do not disturb', show_volume: 'Show volume', close_on_call: 'Close the popup when a call starts', click_sound: 'Click sound',
+      }[s.name] || s.name),
+    };
+  }
+  static getStubConfig() { return {}; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._open = false; }
+  setConfig(c) {
+    this._c = { name: 'Intercom', show_dnd: true, show_volume: true, close_on_call: true, click_sound: true, ...(c || {}) };
+    this._sig = null;
+    if (this._hass) this._render();
+  }
+  getCardSize() { return 3; }
+  getGridOptions() { return { columns: 3, rows: 3, min_columns: 2, min_rows: 2 }; }
+
+  set hass(h) {
+    this._hass = h;
+    if (!this._c) return;
+    const ids = Object.keys(h.states).filter((i) => i.includes('_intercom'));
+    const sig = ids.map((i) => h.states[i]).concat(h.themes && h.themes.darkMode, ids.length);
+    if (this._sig && sig.length === this._sig.length && sig.every((v, i) => v === this._sig[i])) return;
+    this._sig = sig;
+    this._render();
+  }
+
+  connectedCallback() {
+    if (this._wired) return;
+    this._wired = true;
+    const root = this.shadowRoot;
+    const clear = () => { clearTimeout(this._holdT); this._holdT = null; root.querySelector('ha-card')?.classList.remove('pressed'); };
+    root.addEventListener('pointerdown', (e) => {
+      if (!e.target.closest('ha-card')) return;
+      clear();
+      this._held = false;
+      root.querySelector('ha-card').classList.add('pressed');
+      this._holdT = setTimeout(() => { this._held = true; clear(); const me = this._me(); if (me) this._moreInfo(me.id); }, 500);
+    });
+    root.addEventListener('pointerup', (e) => {
+      const pending = !!this._holdT;
+      clear();
+      if (pending && !this._held && e.target.closest('ha-card')) { this._click(); this._open = true; this._render(); }
+    });
+    root.addEventListener('pointercancel', clear);
+    root.addEventListener('contextmenu', (e) => { if (e.target.closest('ha-card')) e.preventDefault(); });
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this._open) { this._open = false; this._render(); }
+      else if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('ha-card')) { e.preventDefault(); this._open = true; this._render(); }
+    });
+    root.addEventListener('click', (e) => this._act(e));
+    root.addEventListener('change', (e) => {
+      const me = this._me();
+      if (e.target.matches('[data-vol]') && me && me.vol) this._hass.callService('number', 'set_value', { entity_id: me.vol, value: Number(e.target.value) });
+    });
+    root.addEventListener('input', (e) => { if (e.target.matches('[data-vol]')) { const o = root.querySelector('.vv'); if (o) o.textContent = `${e.target.value}%`; } });
+  }
+
+  /* ---- data */
+  _devices() {
+    const h = this._hass, esp = (h.services && h.services.esphome) || {};
+    return Object.keys(h.states).filter((id) => /^sensor\..+_intercom$/.test(id)).map((id) => {
+      const st = h.states[id], prefix = id.slice(7, -9);
+      const name = String(st.attributes.friendly_name || prefix).replace(/\s*intercom$/i, '').trim();
+      const slug = kslug(name);
+      const sw = (d, suf) => (h.states[`${d}.${prefix}${suf}`] ? `${d}.${prefix}${suf}` : null);
+      return {
+        id, prefix, name, slug, node: esp[`ks_${slug}_intercom_call`] ? `ks_${slug}` : null,
+        state: st.state, phase: icPhase(st.state), with: h.states[`${id}_kiosk`]?.state || '',
+        dnd: sw('switch', '_intercom_do_not_disturb'), vol: sw('number', '_intercom_volume'),
+        enabled: Object.keys(h.states).find((k) => k.startsWith('switch.') && k.endsWith('_intercom_enabled') && kslug(h.states[k].attributes.friendly_name || '').startsWith(slug)) || null,
+      };
+    }).filter((d) => d.node).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  _meSlug() {
+    let q = null;
+    try { q = new URLSearchParams(window.location.search).get('kiosk'); } catch (e) { /* ignore */ }
+    return kslug(this._c.kiosk || q || '');
+  }
+  _me() { const s = this._meSlug(); return s ? this._devices().find((d) => d.slug === s || d.prefix === s) || null : null; }
+  _on(id) { return id && this._hass.states[id] && this._hass.states[id].state === 'on'; }
+
+  /* ---- render */
+  _render() {
+    if (!this._hass || !this._c) return;
+    const me = this._me();
+    const dark = !!(this._hass.themes && this._hass.themes.darkMode);
+    const dnd = me && this._on(me.dnd);
+    const phase = me ? me.phase : 'idle';
+    const who = me && me.with ? me.with : '';
+    const col = phase === 'calling' ? '#FFB347' : phase === 'idle' ? null : '#4ADE80';
+    const state = !me ? 'Not a kiosk screen' : phase === 'calling' ? `Calling ${who || '…'}` : phase === 'incoming' ? `${who || 'Someone'} is calling`
+      : phase === 'talking' ? `Talking${who ? ` · ${who}` : ''}` : dnd ? 'Do not disturb' : 'Ready';
+    const cls = ['card', phase !== 'idle' ? 'on' : '', `ph-${phase}`, dnd ? 'is-dnd' : '', !me ? 'na' : '', dark ? 'dark' : 'light', 'k-intercom'].filter(Boolean).join(' ');
+    this.shadowRoot.innerHTML = `<style>${CSS}${IC_CSS}</style>
+      <ha-card class="${cls}" style="${col ? `--c:${col};--glow:.5;` : ''}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc(this._c.name)}: ${esc(state)}">
+        <div class="ico"><div class="sq"><i class="halo"></i>
+          <svg class="li" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${INTERCOM_SVG}</svg></div></div>
+        <div class="tn">${esc(this._c.name)}</div><div class="ts">${esc(state)}</div>
+      </ha-card>${this._open ? this._popup(me, phase, who, dnd) : ''}`;
+    if (this._open) requestAnimationFrame(() => this.shadowRoot.querySelector('.sheet')?.focus());
+  }
+
+  _popup(me, phase, who, dnd) {
+    const hide = String(this._c.hide || '').split(',').map((x) => kslug(x)).filter(Boolean);
+    let body = '';
+    if (!me) {
+      body = `<p class="note">This card needs to know which screen it's on. Open the dashboard from Kiosk Satellite with <code>?kiosk=&lt;device&gt;</code> in the address, or set <b>This screen</b> in the card settings.</p>`;
+    } else {
+      if (phase !== 'idle') {
+        const txt = phase === 'incoming' ? `<b>${esc(who || 'Someone')}</b> is calling` : phase === 'calling' ? `Calling <b>${esc(who || '…')}</b>` : `Talking with <b>${esc(who || '…')}</b>`;
+        body += `<div class="banner ${phase}"><span>${ig('phone')}${txt}</span><div class="bb">${phase === 'incoming'
+          ? `<button class="pill red" data-act="decline">${ig('hang')}Decline</button><button class="pill green" data-act="answer">${ig('phone')}Answer</button>`
+          : `<button class="pill red" data-act="hangup">${ig('hang')}Hang up</button>`}</div></div>`;
+      }
+      const others = this._devices().filter((d) => d.slug !== me.slug && !hide.includes(d.slug));
+      body += others.map((d) => {
+        const off = d.enabled && !this._on(d.enabled);
+        const st = d.state === 'unavailable' ? ['Offline', 'off'] : off ? ['Intercom off', 'off'] : this._on(d.dnd) ? ['Do not disturb', 'off']
+          : d.phase !== 'idle' ? [`Busy${d.with ? ` · with ${d.with}` : ''}`, 'busy'] : ['Available', 'ok'];
+        const can = st[1] === 'ok' && phase === 'idle';
+        const icon = /phone/.test(d.slug) ? 'mobile' : /nsp|clock|panel/.test(d.slug) ? 'panel' : 'tablet';
+        return `<button class="row" data-act="call" data-kiosk="${esc(d.name)}" ${can ? '' : 'disabled'} aria-label="Call ${esc(d.name)}">
+          <span class="dev">${ig(icon)}</span><span class="who"><b>${esc(d.name)}</b><span class="st ${st[1]}">${esc(st[0])}</span></span>
+          <span class="callpill">${ig('phone')}Call</span></button>`;
+      }).join('') || '<p class="note">No other Kiosk Satellite screens have the intercom turned on.</p>';
+      const foot = [];
+      if (this._c.show_dnd && me.dnd) foot.push(`<button class="tog${dnd ? ' on' : ''}" data-act="dnd" role="switch" aria-checked="${dnd}">${ig('moon')}<span>Do not disturb</span><i class="sw"></i></button>`);
+      if (this._c.show_volume && me.vol) {
+        const v = Math.round(num(this._hass.states[me.vol]?.state) ?? 60);
+        foot.push(`<label class="vol">${ig('vol')}<input type="range" min="0" max="100" step="5" value="${v}" data-vol aria-label="Intercom volume"><span class="vv">${v}%</span></label>`);
+      }
+      if (foot.length) body += `<div class="foot">${foot.join('')}</div>`;
+    }
+    return `<div class="ov" data-act="close"><div class="sheet" role="dialog" aria-modal="true" aria-label="Intercom" tabindex="-1">
+      <div class="hd"><div><b>Intercom</b><span>${me ? `From ${esc(me.name)}` : 'Kiosk Satellite'}</span></div><button class="x" data-act="close" aria-label="Close">${ig('close')}</button></div>
+      ${body}</div></div>`;
+  }
+
+  /* ---- actions */
+  _act(e) {
+    const t = e.target.closest('[data-act]');
+    if (!t) return;
+    if (t.dataset.act === 'close' && t.classList.contains('ov') && e.target !== t) return; // clicks inside the sheet
+    const me = this._me(), H = this._hass;
+    switch (t.dataset.act) {
+      case 'close': this._open = false; this._render(); return;
+      case 'call':
+        if (!me) return;
+        this._click();
+        H.callService('esphome', `${me.node}_intercom_call`, { kiosk: t.dataset.kiosk });
+        if (this._c.close_on_call) { this._open = false; this._render(); }
+        return;
+      case 'hangup': case 'answer': case 'decline':
+        if (!me) return;
+        this._click();
+        H.callService('esphome', `${me.node}_intercom_${t.dataset.act}`, {});
+        if (t.dataset.act !== 'answer' || this._c.close_on_call) { this._open = false; this._render(); }
+        return;
+      case 'dnd': if (me && me.dnd) { this._click(); H.callService('switch', 'toggle', { entity_id: me.dnd }); } return;
+      default:
+    }
+  }
+  _haptic() { window.dispatchEvent(new CustomEvent('haptic', { detail: 'light' })); }
+  _click() { KshIconCard.prototype._click.call(this); }
+  _moreInfo(id) { const ev = new Event('hass-more-info', { bubbles: true, composed: true }); ev.detail = { entityId: id }; this.dispatchEvent(ev); }
+}
+
+const IC_CSS = `
+.k-intercom .wv{opacity:.32;transition:opacity .45s}.k-intercom.on .wv{opacity:1}.k-intercom .w2{opacity:.55}
+.k-intercom .dnd{display:none;stroke:#FF5A5A;stroke-width:3}
+.k-intercom.is-dnd .dnd{display:inline}.k-intercom.is-dnd .li{opacity:.55}.k-intercom.is-dnd .wv{opacity:.12}
+.ph-incoming .wv path{animation:icwave 1.1s ease-in-out infinite}.ph-incoming .wv .w2{animation-delay:.25s}
+.ph-incoming .li{animation:icshake 1.6s ease-in-out infinite;transform-origin:50% 50%}
+.ph-calling .wv path{animation:icwave 1.6s ease-in-out infinite}.ph-calling .wv .w2{animation-delay:.4s}
+@keyframes icwave{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes icshake{0%,60%,100%{transform:rotate(0)}65%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}85%{transform:rotate(-4deg)}}
+.ov{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:default}
+.sheet{width:min(460px,94vw);max-height:86vh;overflow:auto;box-sizing:border-box;padding:18px 18px 16px;border-radius:28px;outline:none;
+  background:var(--card-background-color,var(--ha-card-background,#111));color:var(--primary-text-color);
+  border:1px solid var(--divider-color,transparent);box-shadow:0 30px 80px rgba(0,0,0,.45);font-family:inherit;text-align:left}
+@media (max-width:600px){.ov{align-items:flex-end}.sheet{width:100%;border-radius:28px 28px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}}
+.ig{width:22px;height:22px;flex:none}
+.hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.hd b{display:block;font-size:21px}.hd span{font-size:12.5px;color:var(--secondary-text-color)}
+.x{all:unset;cursor:pointer;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--primary-text-color) 7%,transparent)}
+.x:focus-visible,.row:focus-visible,.pill:focus-visible,.tog:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+.row{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:12px;padding:11px 4px;border-top:1px solid var(--divider-color,rgba(127,127,127,.15));border-radius:14px}
+.row:active{background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
+.row[disabled]{cursor:default}.row[disabled] .callpill{opacity:.25;filter:grayscale(1)}
+.dev{width:46px;height:46px;flex:none;border-radius:15px;display:flex;align-items:center;justify-content:center;color:var(--secondary-text-color);background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}
+.who{flex:1;min-width:0;display:flex;flex-direction:column}.who b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-size:12.5px}.st.ok{color:#22C55E}.st.busy{color:#E8892B}.st.off{color:var(--secondary-text-color)}
+.callpill{display:flex;align-items:center;gap:6px;height:42px;padding:0 16px;border-radius:21px;font-size:14px;font-weight:600;color:#16A34A;background:rgba(34,197,94,.15)}
+.banner{display:flex;flex-direction:column;gap:10px;padding:12px 14px;margin:6px 0 4px;border-radius:18px;background:rgba(34,197,94,.13)}
+.banner.calling{background:rgba(255,179,71,.16)}
+.banner>span{display:flex;align-items:center;gap:8px;font-size:15px}.bb{display:flex;gap:10px}
+.pill{all:unset;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:23px;font-weight:600;font-size:15px;color:#fff}
+.pill.red{background:#DC2626}.pill.green{background:#16A34A}
+.foot{display:flex;flex-direction:column;gap:12px;margin-top:8px;padding-top:12px;border-top:1px solid var(--divider-color,rgba(127,127,127,.15))}
+.tog{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:15px}.tog span{flex:1}
+.sw{position:relative;width:44px;height:26px;border-radius:13px;background:color-mix(in srgb,var(--primary-text-color) 15%,transparent);transition:background .2s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+.tog.on .sw{background:#6366F1}.tog.on .sw::after{transform:translateX(18px)}
+.vol{display:flex;align-items:center;gap:10px;font-size:14px}.vol input{flex:1;accent-color:var(--primary-color);height:28px}.vv{width:42px;text-align:right;color:var(--secondary-text-color)}
+.note{font-size:14px;color:var(--secondary-text-color);line-height:1.45}.note code{font-size:13px}
+`;
+if (!customElements.get('ksh-intercom-card')) customElements.define('ksh-intercom-card', KshIntercomCard);
+if (!window.customCards.some((x) => x.type === 'ksh-intercom-card')) window.customCards.push({ type: 'ksh-intercom-card', name: 'KSH · Intercom (Kiosk Satellite)', description: 'Intercom button with a popup to call other Kiosk Satellite screens', preview: true });

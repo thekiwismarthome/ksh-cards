@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 (unreleased)
+
+- **New `ksh-intercom-card`:** a Kiosk Satellite intercom button. The handset-and-waves icon shows this screen's intercom state; tapping it opens a popup listing the other kiosks, and tapping one calls it through Kiosk Satellite's own intercom. The popup also has hang up, answer, decline, do not disturb and volume.
+
 ## 1.1.0
 
 - **New `ksh-forecast-radar-card`:** next 24 hours and rain radar in one card, with a switch in the header, full-screen radar, and an automatic return to the forecast after 5 minutes (`radar_timeout`). Set `default_view: radar` to open on the radar.
