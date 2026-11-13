@@ -95,7 +95,7 @@ Each icon is its own card, so you can place it on any dashboard and copy it betw
 | `ksh-dryer-card` | Dryer | Appliance state sensors |
 | `ksh-ev-car-card` | Coupe-SUV EV (BYD Sealion 7 style) | EV battery %. Ring shows charge; glows only while charging |
 | `ksh-icon-card` | Choose with `icon:` | Any of the above |
-| `ksh-intercom-card` | Handset with waves | **Kiosk Satellite intercom.** Shows this screen's intercom state (ready, calling, incoming, talking, do not disturb). Tap for a popup listing the other kiosks; tap one to call it through Kiosk Satellite's intercom. Also hang up, answer, decline, do not disturb and volume. It works out which screen it's on by itself: from `kiosk:` if set, then `?kiosk=<device>` in the address, then the device name Kiosk Satellite reports. In any other browser it asks once ("Which screen is this?") and remembers. Options: `kiosk`, `name`, `hide` (comma list), `show_dnd`, `show_volume`, `close_on_call` |
+| `ksh-intercom-card` | Handset with waves | **Kiosk Satellite intercom.** Shows this screen's intercom state (ready, calling, incoming, talking, do not disturb). Tap for a popup listing the other kiosks; tap one to call it through Kiosk Satellite's intercom. Also hang up, answer, decline, do not disturb and volume. It works out which screen it's on by itself: from `kiosk:` if set, then `?kiosk=<device>` in the address, then the device name Kiosk Satellite reports. In any other browser it asks once ("Which screen is this?") and remembers. Options: `kiosk` (or `my_device`), `name`, `hide` (comma list), `show_dnd`, `show_volume`, `close_on_call` |
 
 ### Example
 

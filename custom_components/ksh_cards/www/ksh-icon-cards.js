@@ -549,7 +549,8 @@ class KshIntercomCard extends HTMLElement {
   _meSlug() {
     let q = null;
     try { q = new URLSearchParams(window.location.search).get('kiosk'); } catch (e) { /* ignore */ }
-    if (this._c.kiosk) return [kslug(this._c.kiosk), 'config'];
+    const k = this._c.kiosk || this._c.my_device; // my_device: older KSH Intercom card configs
+    if (k) return [kslug(k), 'config'];
     if (q) return [kslug(q), 'url'];
     if (KS_ME.name) return [kslug(KS_ME.name).replace(/^ks_/, ''), 'app'];
     const saved = ksSaved();
@@ -598,7 +599,8 @@ class KshIntercomCard extends HTMLElement {
           ? `<button class="pill red" data-act="decline">${ig('hang')}Decline</button><button class="pill green" data-act="answer">${ig('phone')}Answer</button>`
           : `<button class="pill red" data-act="hangup">${ig('hang')}Hang up</button>`}</div></div>`;
       }
-      const others = this._devices().filter((d) => d.slug !== me.slug && !hide.includes(d.slug));
+      const only = this._c.show_all === false && Array.isArray(this._c.devices) && this._c.devices.length ? this._c.devices.map((x) => kslug(x)) : null;
+      const others = this._devices().filter((d) => d.slug !== me.slug && !hide.includes(d.slug) && (!only || only.includes(d.slug)));
       body += others.map((d) => {
         const off = d.enabled && !this._on(d.enabled);
         const st = d.state === 'unavailable' ? ['Offline', 'off'] : off ? ['Intercom off', 'off'] : this._on(d.dnd) ? ['Do not disturb', 'off']
