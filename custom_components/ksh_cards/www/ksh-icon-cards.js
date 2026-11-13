@@ -513,13 +513,13 @@ class KshIntercomCard extends HTMLElement {
     root.addEventListener('pointerup', (e) => {
       const pending = !!this._holdT;
       clear();
-      if (pending && !this._held && e.target.closest('ha-card')) { this._click(); this._open = true; this._render(); }
+      if (pending && !this._held && e.target.closest('ha-card')) { this._click(); this._openPopup(); }
     });
     root.addEventListener('pointercancel', clear);
     root.addEventListener('contextmenu', (e) => { if (e.target.closest('ha-card')) e.preventDefault(); });
     root.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this._open) { this._open = false; this._render(); }
-      else if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('ha-card')) { e.preventDefault(); this._open = true; this._render(); }
+      else if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('ha-card')) { e.preventDefault(); this._openPopup(); }
     });
     root.addEventListener('click', (e) => this._act(e));
     root.addEventListener('change', (e) => {
@@ -629,6 +629,8 @@ class KshIntercomCard extends HTMLElement {
     const t = e.target.closest('[data-act]');
     if (!t) return;
     if (t.dataset.act === 'close' && t.classList.contains('ov') && e.target !== t) return; // clicks inside the sheet
+    // The tap that opened the popup fires its click after the popup is drawn; on touch screens it lands on the backdrop.
+    if (Date.now() - (this._openedAt || 0) < 600 && (t.classList.contains('ov') || t.dataset.act !== 'close')) return;
     const me = this._me(), H = this._hass;
     switch (t.dataset.act) {
       case 'close': this._open = false; this._render(); return;
@@ -650,6 +652,7 @@ class KshIntercomCard extends HTMLElement {
       default:
     }
   }
+  _openPopup() { this._open = true; this._openedAt = Date.now(); this._render(); }
   _haptic() { window.dispatchEvent(new CustomEvent('haptic', { detail: 'light' })); }
   _click() { KshIconCard.prototype._click.call(this); }
   _moreInfo(id) { const ev = new Event('hass-more-info', { bubbles: true, composed: true }); ev.detail = { entityId: id }; this.dispatchEvent(ev); }
