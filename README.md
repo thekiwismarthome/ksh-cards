@@ -17,16 +17,19 @@ Every card follows your Home Assistant theme and light/dark mode. A matching **K
 
 ## Install
 
-### Option 1: integration (recommended)
+### Option 1: HACS (recommended)
 
-The `ksh_cards` integration serves the cards from inside Home Assistant and loads them on every dashboard. You don't need to add any Lovelace resources, and updating the integration updates every card.
+1. In HACS, open **⋮ → Custom repositories**, add `https://github.com/thekiwismarthome/ksh-cards` with type **Integration**, and click **Add**.
+2. Find **KSH Cards** in HACS and click **Download**.
+3. Restart Home Assistant.
+4. Go to **Settings → Devices & services → Add integration**, search for **KSH Cards** and add it.
+5. Refresh your browser (or restart the Kiosk Satellite app). The cards appear in the card picker under **KSH**.
 
-1. Copy `custom_components/ksh_cards` into your Home Assistant `config/custom_components/` folder.
-2. Restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration**, search for **KSH Cards** and add it.
-4. Refresh your browser (or restart the Kiosk Satellite app). The cards appear in the card picker under **KSH**.
+The integration serves the cards from inside Home Assistant and loads them on every dashboard, so there are no Lovelace resources to add. HACS tells you when an update is available. To remove the cards, delete the integration and refresh.
 
-To remove the cards, delete the integration and refresh.
+### Option 1b: manual install of the integration
+
+Copy `custom_components/ksh_cards` into your `config/custom_components/` folder, then follow steps 3 to 5 above.
 
 ### Option 2: dashboard resources
 
@@ -131,8 +134,6 @@ See [`examples/weather-view.yaml`](examples/weather-view.yaml) for a complete pa
 
 [MIT](LICENSE). Anyone may use, copy, change, share and sell these cards, forever, provided the copyright notice stays with them.
 
-This folder is licensed separately from the rest of the HA-Extras repository.
+## Contributing
 
-## Publishing through HACS
-
-HACS installs integrations only from the root of a repository. To make KSH Cards installable through HACS, move this folder into its own repository (for example `thekiwismarthome/ksh-cards`). It's already laid out for that: `custom_components/`, `hacs.json`, `README.md` and `LICENSE` at the top level.
+Issues and pull requests are welcome at [github.com/thekiwismarthome/ksh-cards](https://github.com/thekiwismarthome/ksh-cards).
