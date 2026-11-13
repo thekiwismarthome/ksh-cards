@@ -1,7 +1,7 @@
 """Constants for KSH Cards."""
 
 DOMAIN = "ksh_cards"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 URL_BASE = "/ksh_cards"
 
 # Card bundles served from ./www and loaded on every dashboard.

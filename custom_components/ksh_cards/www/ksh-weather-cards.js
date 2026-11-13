@@ -6,6 +6,7 @@
  *   ksh-weather-hourly-card   next 24 hours: temperature curve, rain bars, night bands
  *   ksh-weather-daily-card    7-day forecast with temperature range bars
  *   ksh-rain-radar-card       animated rain radar (RainViewer) with full-screen view
+ *   ksh-forecast-radar-card   next 24 hours and rain radar in one card, with a switch
  *   ksh-wind-card             compass, speed, gusts, Beaufort
  *   ksh-uv-card               UV gauge with today's peak
  *   ksh-humidity-card         humidity ring and dew point
@@ -17,7 +18,7 @@
  * Follows the Home Assistant theme (card background, text colours, light/dark).
  * MIT licence — free to use, change and share, forever.
  */
-const KSH_WEATHER_VERSION = '1.0.0';
+const KSH_WEATHER_VERSION = '1.1.0';
 
 /* ================================================================ helpers */
 const BAD = new Set(['unknown', 'unavailable', 'none', 'None', '']);
@@ -303,11 +304,14 @@ class KshWeatherHourlyCard extends KshWeatherBase {
   static get grid() { return { columns: 12, rows: 4, min_columns: 6, min_rows: 3 }; }
   get _needs() { return ['hourly']; }
   _body() {
+    const r = this._chart(Math.max(240, (this._w || 600) - 36), Math.max(170, (this._h ? this._h - 66 : 230)));
+    return `${this._head(r.title, r.summary)}${r.svg}`;
+  }
+  /** Draws the hourly chart at W×H. Returns { title, summary, svg }. Shared with the forecast/radar card. */
+  _chart(W, H) {
     const now = new Date();
     const hours = this._forecast('hourly').filter((x) => +x.t >= +now - 59 * 60000).slice(0, Number(this._c.hours) || 24);
-    const W = Math.max(240, (this._w || 600) - 36);
-    const H = Math.max(170, (this._h ? this._h - 66 : 230));
-    if (hours.length < 2) return `${this._head('Next 24 hours')}<div class="empty">Hourly forecast unavailable</div>`;
+    if (hours.length < 2) return { title: 'Next 24 hours', summary: '', svg: '<div class="empty">Hourly forecast unavailable</div>' };
     const sunT = this._sunTimes();
     const temps = hours.map((h) => num(h.temperature)), valid = temps.filter((t) => t !== null);
     const tMin = Math.min(...valid), tMax = Math.max(...valid), iMax = temps.indexOf(tMax), iMin = temps.indexOf(tMin);
@@ -352,13 +356,13 @@ class KshWeatherHourlyCard extends KshWeatherBase {
     const at = (i) => (i === 0 ? 'now' : `at ${esc(fmtHour(hours[i].t))}`);
     const right = W > 420 ? `High ${Math.round(tMax)}° ${at(iMax)}<span class="sep">·</span>Low ${Math.round(tMin)}° ${at(iMin)}` : '';
     const area = `${line} L${r1(X(N - 1))},${H} L${r1(X(0))},${H} Z`;
-    return `${this._head(`Next ${N} hours`, right)}
+    return { title: `Next ${N} hours`, summary: right, svg: `
       <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
         <defs><linearGradient id="hcl" gradientUnits="userSpaceOnUse" x1="${X(0)}" y1="0" x2="${X(N - 1)}" y2="0">${stops}</linearGradient>
         <linearGradient id="hcf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--primary-text-color);stop-opacity:.12"/><stop offset="1" style="stop-color:var(--primary-text-color);stop-opacity:0"/></linearGradient></defs>
         ${bands}<line x1="0" x2="${W}" y1="${base + 0.5}" y2="${base + 0.5}" style="stroke:${ink(0.08)}"/>
         <path d="${area}" fill="url(#hcf)"/><path d="${line}" fill="none" stroke="url(#hcl)" stroke-width="3.5" stroke-linecap="round"/>
-        ${bars}${precip.some((p) => p > 0) ? '' : `<text x="${W / 2}" y="${base - 8}" class="norain">No rain expected</text>`}${labels}</svg>`;
+        ${bars}${precip.some((p) => p > 0) ? '' : `<text x="${W / 2}" y="${base - 8}" class="norain">No rain expected</text>`}${labels}</svg>` };
   }
   static get css() {
     return `.chart{display:block;overflow:visible}.chart text{fill:var(--primary-text-color);text-anchor:middle;font-family:inherit}
@@ -587,6 +591,109 @@ class KshRainRadarCard extends KshWeatherBase {
   }
 }
 
+
+/* ================================================ forecast + radar card
+ * "Next 24 hours | Rain radar" in one card, like the KSH weather wall:
+ * a switch in the header, full-screen radar, and an automatic return to the
+ * forecast after a few minutes so a wall tablet doesn't stay on the map.
+ */
+class KshForecastRadarCard extends KshWeatherHourlyCard {
+  static get defaults() { return { hours: 24, default_view: 'forecast', zoom: 7, frames: 8, radar_timeout: 300, show_fullscreen: true }; }
+  static get schema() {
+    return [{ name: 'entity', required: true, selector: ENT('weather') }, { name: 'hours', selector: { number: { min: 6, max: 48, mode: 'box' } } },
+      { name: 'default_view', selector: { select: { options: [{ value: 'forecast', label: 'Next 24 hours' }, { value: 'radar', label: 'Rain radar' }] } } },
+      { name: 'zoom', selector: { number: { min: 4, max: 11, mode: 'slider' } } }, { name: 'frames', selector: { number: { min: 3, max: 13, mode: 'box' } } },
+      { name: 'radar_timeout', selector: { number: { min: 0, max: 3600, step: 30, mode: 'box', unit_of_measurement: 's' } } },
+      { name: 'latitude', selector: { number: { min: -90, max: 90, step: 0.0001, mode: 'box' } } }, { name: 'longitude', selector: { number: { min: -180, max: 180, step: 0.0001, mode: 'box' } } },
+      { name: 'show_fullscreen', selector: { boolean: {} } }];
+  }
+  static get grid() { return { columns: 12, rows: 5, min_columns: 6, min_rows: 4 }; }
+  _opts(boost = 0) {
+    const cfg = this._hass.config || {};
+    return { lat: Number(this._c.latitude ?? cfg.latitude ?? 0), lon: Number(this._c.longitude ?? cfg.longitude ?? 0), zoom: Number(this._c.zoom) + boost, frames: Number(this._c.frames) || 8, dark: this._dark };
+  }
+  _render() {
+    if (!this._hass || !this._c) return;
+    const root = this.shadowRoot;
+    if (!this._built) {
+      this._built = true;
+      this._view = this._view || (this._c.default_view === 'radar' ? 'radar' : 'forecast');
+      root.innerHTML = `<style>${BASE_CSS}${KshWeatherHourlyCard.css}${KshRainRadarCard.css}${KshForecastRadarCard.css}</style>
+        <ha-card class="${this._c.transparent ? 'transparent' : ''}">${DEFS}
+          <div class="ph"><span class="seg" role="tablist">
+              <button role="tab" data-v="forecast">Next ${Number(this._c.hours) || 24} hours</button><button role="tab" data-v="radar">Rain radar</button></span>
+            <span class="phr"></span></div>
+          <div class="hc"></div><div class="host" hidden></div></ha-card>
+        <div class="ov" hidden><div class="ovp"><div class="ph"><span>Rain radar</span><span class="phr"><button class="chip btn" data-act="close">${gl('close')}Close</button></span></div><div class="host big"></div></div></div>`;
+      root.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-v],[data-act]');
+        if (!t) return;
+        if (t.dataset.v) { this._view = t.dataset.v; this._arm(); this._render(); }
+        else if (t.dataset.act === 'open') {
+          root.querySelector('.ov').hidden = false;
+          if (this._map) this._map.pause();
+          requestAnimationFrame(() => { this._big = new RadarMap(root.querySelector('.host.big'), this._opts(1)); });
+          this._arm();
+        } else if (t.dataset.act === 'close') this._closeBig();
+      });
+      root.addEventListener('pointerdown', () => this._arm(), true);
+    }
+    const radar = this._view === 'radar';
+    root.querySelectorAll('.seg button').forEach((b) => { const on = b.dataset.v === this._view; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    const hc = root.querySelector('.hc'), host = root.querySelector('.host:not(.big)'), phr = root.querySelector('.ph .phr');
+    hc.hidden = radar;
+    host.hidden = !radar;
+    if (radar) {
+      phr.innerHTML = this._c.show_fullscreen ? `<button class="chip btn" data-act="open">${gl('expand')}Full screen</button>` : '';
+      if (!this._map) requestAnimationFrame(() => { if (!this._map && this._view === 'radar') this._map = new RadarMap(host, this._opts()); });
+      else this._map.setDark(this._dark);
+    } else {
+      if (this._map) { this._map.destroy(); this._map = null; }
+      const W = Math.max(240, (this._w || this.clientWidth || 600) - 36);
+      const H = Math.max(170, ((this._h || this.clientHeight) ? (this._h || this.clientHeight) - 70 : 230));
+      const r = this._chart(W, H);
+      phr.innerHTML = r.summary;
+      hc.innerHTML = r.svg;
+    }
+    if (this._big) this._big.setDark(this._dark);
+  }
+  /** After radar_timeout seconds without a touch, go back to the forecast (unless radar is the default view). */
+  _arm() {
+    clearTimeout(this._revert);
+    const s = Number(this._c.radar_timeout) || 0;
+    if (!s || this._c.default_view === 'radar' || (this._view !== 'radar' && !this._big)) return;
+    this._revert = setTimeout(() => { this._closeBig(); this._view = 'forecast'; this._render(); }, s * 1000);
+  }
+  _closeBig() {
+    const ov = this.shadowRoot.querySelector('.ov');
+    if (ov) ov.hidden = true;
+    if (this._big) { this._big.destroy(); this._big = null; }
+    if (this._map && !this._map.playing) this._map.start();
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this._ro2 = new ResizeObserver(() => { this._map && this._map.draw(); this._big && this._big.draw(); });
+    this._ro2.observe(this);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._ro2 && this._ro2.disconnect();
+    clearTimeout(this._revert);
+    if (this._map) this._map.destroy();
+    if (this._big) this._big.destroy();
+    this._map = this._big = null;
+    this._built = false;
+  }
+  static get css() {
+    return `ha-card{min-height:260px}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:12px;background:${ink(0.07)}}
+.seg button{all:unset;cursor:pointer;padding:4px 11px;border-radius:9px;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary-text-color)}
+.seg button.on{background:${ink(0.14)};color:var(--primary-text-color)}
+.seg button:focus-visible{outline:2px solid var(--primary-color);outline-offset:1px}
+.hc{flex:1;min-height:0}.hc[hidden],.host[hidden]{display:none}`;
+  }
+}
+
 /* ============================================================ small tiles */
 const TILE_GRID = { columns: 4, rows: 3, min_columns: 3, min_rows: 2 };
 
@@ -777,6 +884,7 @@ const KSH_WEATHER = [
   ['ksh-weather-hourly-card', KshWeatherHourlyCard, 'Weather · next 24 hours', 'Temperature curve, rain bars and night bands'],
   ['ksh-weather-daily-card', KshWeatherDailyCard, 'Weather · 7-day', 'Daily forecast with temperature range bars'],
   ['ksh-rain-radar-card', KshRainRadarCard, 'Rain radar', 'Animated rain radar with full-screen view'],
+  ['ksh-forecast-radar-card', KshForecastRadarCard, 'Weather · next 24 hours + rain radar', 'Hourly forecast and rain radar in one card, with a switch between them'],
   ['ksh-wind-card', KshWindCard, 'Wind', 'Compass, speed, gusts and Beaufort'],
   ['ksh-uv-card', KshUvCard, 'UV index', 'UV gauge with peak'],
   ['ksh-air-quality-card', KshAirQualityCard, 'Air quality', 'AQI gauge'],

@@ -3,7 +3,7 @@
 Modular dashboard cards for Home Assistant, built for wall tablets and phones.
 
 - **Icon cards:** one card per device, drawn as large line art. White when off; when on, it glows in the device's own colour, with a thin ring for brightness, battery or progress.
-- **Weather cards:** the weather page split into separate cards, so each screen can show only what it needs.
+- **Weather cards:** the weather page split into separate cards, so each screen can show only what it needs. Hourly forecast and rain radar are also available together in one card.
 
 Every card follows your Home Assistant theme and light/dark mode. A matching **KSH theme** is included: muted grey by day, true black at night.
 
@@ -112,6 +112,7 @@ charging_entity: binary_sensor.car_charging
 | `ksh-weather-hourly-card` | Temperature curve, rain bars, night bands | `entity`, `hours` |
 | `ksh-weather-daily-card` | Day-by-day forecast with range bars | `entity`, `days` |
 | `ksh-rain-radar-card` | Animated rain radar, zoom and full-screen | `zoom`, `frames`, `latitude`, `longitude`, `show_fullscreen` |
+| `ksh-forecast-radar-card` | Next 24 hours and rain radar in one card, with a switch between them, full-screen radar, and an automatic return to the forecast | `entity`, `hours`, `default_view` (`forecast` or `radar`), `zoom`, `frames`, `radar_timeout` (seconds, `0` = stay), `show_fullscreen` |
 | `ksh-wind-card` | Compass, speed, gusts, Beaufort | `entity`, `gust_entity` |
 | `ksh-uv-card` | UV gauge with peak | `entity` or `uv_entity`, `peak_entity` |
 | `ksh-air-quality-card` | AQI gauge | `entity` |
