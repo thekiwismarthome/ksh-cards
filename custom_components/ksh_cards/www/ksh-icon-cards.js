@@ -439,6 +439,24 @@ const IG = {
 };
 const ig = (n) => `<svg class="ig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IG[n]}</svg>`;
 
+/* Which Kiosk Satellite screen is this? The app injects window.kioskSatellite into every page. */
+const KS_ME = { name: null, asked: false, cards: new Set() };
+const KS_SAVED = 'ksh-intercom-kiosk';
+function ksLookup() {
+  const ks = window.kioskSatellite;
+  if (KS_ME.asked || !ks || typeof ks.getDeviceInfo !== 'function') return;
+  KS_ME.asked = true;
+  Promise.resolve(ks.getDeviceInfo()).then((i) => {
+    if (!i || !i.name) return;
+    KS_ME.name = String(i.name);
+    KS_ME.cards.forEach((c) => { c._sig = null; c._render(); });
+  }).catch(() => {});
+}
+function ksSaved(v) {
+  try { if (v === undefined) return localStorage.getItem(KS_SAVED) || ''; if (v) localStorage.setItem(KS_SAVED, v); else localStorage.removeItem(KS_SAVED); } catch (e) { /* storage blocked */ }
+  return '';
+}
+
 class KshIntercomCard extends HTMLElement {
   static getConfigForm() {
     return {
@@ -452,7 +470,7 @@ class KshIntercomCard extends HTMLElement {
         { name: 'click_sound', selector: { boolean: {} } },
       ],
       computeLabel: (s) => ({
-        kiosk: 'This screen (blank = from ?kiosk= in the address)', name: 'Name', hide: 'Kiosks to hide (comma separated)',
+        kiosk: 'This screen (blank = detect automatically)', name: 'Name', hide: 'Kiosks to hide (comma separated)',
         show_dnd: 'Show Do not disturb', show_volume: 'Show volume', close_on_call: 'Close the popup when a call starts', click_sound: 'Click sound',
       }[s.name] || s.name),
     };
@@ -470,6 +488,7 @@ class KshIntercomCard extends HTMLElement {
   set hass(h) {
     this._hass = h;
     if (!this._c) return;
+    ksLookup();
     const ids = Object.keys(h.states).filter((i) => i.includes('_intercom'));
     const sig = ids.map((i) => h.states[i]).concat(h.themes && h.themes.darkMode, ids.length);
     if (this._sig && sig.length === this._sig.length && sig.every((v, i) => v === this._sig[i])) return;
@@ -477,7 +496,9 @@ class KshIntercomCard extends HTMLElement {
     this._render();
   }
 
+  disconnectedCallback() { KS_ME.cards.delete(this); }
   connectedCallback() {
+    KS_ME.cards.add(this);
     if (this._wired) return;
     this._wired = true;
     const root = this.shadowRoot;
@@ -524,12 +545,21 @@ class KshIntercomCard extends HTMLElement {
       };
     }).filter((d) => d.node).sort((a, b) => a.name.localeCompare(b.name));
   }
+  /* Order: card setting, ?kiosk= in the address, the name Kiosk Satellite reports, then a choice saved in this browser. */
   _meSlug() {
     let q = null;
     try { q = new URLSearchParams(window.location.search).get('kiosk'); } catch (e) { /* ignore */ }
-    return kslug(this._c.kiosk || q || '');
+    if (this._c.kiosk) return [kslug(this._c.kiosk), 'config'];
+    if (q) return [kslug(q), 'url'];
+    if (KS_ME.name) return [kslug(KS_ME.name).replace(/^ks_/, ''), 'app'];
+    const saved = ksSaved();
+    return saved ? [kslug(saved), 'saved'] : ['', ''];
   }
-  _me() { const s = this._meSlug(); return s ? this._devices().find((d) => d.slug === s || d.prefix === s) || null : null; }
+  _me() {
+    const [s, src] = this._meSlug();
+    this._src = src;
+    return s ? this._devices().find((d) => d.slug === s || d.prefix === s || d.node === `ks_${s}`) || null : null;
+  }
   _on(id) { return id && this._hass.states[id] && this._hass.states[id].state === 'on'; }
 
   /* ---- render */
@@ -541,7 +571,7 @@ class KshIntercomCard extends HTMLElement {
     const phase = me ? me.phase : 'idle';
     const who = me && me.with ? me.with : '';
     const col = phase === 'calling' ? '#FFB347' : phase === 'idle' ? null : '#4ADE80';
-    const state = !me ? 'Not a kiosk screen' : phase === 'calling' ? `Calling ${who || '…'}` : phase === 'incoming' ? `${who || 'Someone'} is calling`
+    const state = !me ? 'Tap to choose this screen' : phase === 'calling' ? `Calling ${who || '…'}` : phase === 'incoming' ? `${who || 'Someone'} is calling`
       : phase === 'talking' ? `Talking${who ? ` · ${who}` : ''}` : dnd ? 'Do not disturb' : 'Ready';
     const cls = ['card', phase !== 'idle' ? 'on' : '', `ph-${phase}`, dnd ? 'is-dnd' : '', !me ? 'na' : '', dark ? 'dark' : 'light', 'k-intercom'].filter(Boolean).join(' ');
     this.shadowRoot.innerHTML = `<style>${CSS}${IC_CSS}</style>
@@ -557,7 +587,10 @@ class KshIntercomCard extends HTMLElement {
     const hide = String(this._c.hide || '').split(',').map((x) => kslug(x)).filter(Boolean);
     let body = '';
     if (!me) {
-      body = `<p class="note">This card needs to know which screen it's on. Open the dashboard from Kiosk Satellite with <code>?kiosk=&lt;device&gt;</code> in the address, or set <b>This screen</b> in the card settings.</p>`;
+      const all = this._devices();
+      body = `<p class="note">Which screen is this? Pick it once and this screen will remember.</p>` + (all.map((d) => `<button class="row" data-act="iam" data-slug="${esc(d.slug)}" aria-label="This is ${esc(d.name)}">
+          <span class="dev">${ig(/phone/.test(d.slug) ? 'mobile' : /nsp|clock|panel/.test(d.slug) ? 'panel' : 'tablet')}</span><span class="who"><b>${esc(d.name)}</b><span class="st off">This screen</span></span></button>`).join('')
+        || '<p class="note">No Kiosk Satellite screens with the intercom were found.</p>');
     } else {
       if (phase !== 'idle') {
         const txt = phase === 'incoming' ? `<b>${esc(who || 'Someone')}</b> is calling` : phase === 'calling' ? `Calling <b>${esc(who || '…')}</b>` : `Talking with <b>${esc(who || '…')}</b>`;
@@ -585,7 +618,7 @@ class KshIntercomCard extends HTMLElement {
       if (foot.length) body += `<div class="foot">${foot.join('')}</div>`;
     }
     return `<div class="ov" data-act="close"><div class="sheet" role="dialog" aria-modal="true" aria-label="Intercom" tabindex="-1">
-      <div class="hd"><div><b>Intercom</b><span>${me ? `From ${esc(me.name)}` : 'Kiosk Satellite'}</span></div><button class="x" data-act="close" aria-label="Close">${ig('close')}</button></div>
+      <div class="hd"><div><b>Intercom</b><span>${me ? `From ${esc(me.name)}${this._src === 'saved' ? ' · <button class="chg" data-act="forget">Change</button>' : ''}` : 'Kiosk Satellite'}</span></div><button class="x" data-act="close" aria-label="Close">${ig('close')}</button></div>
       ${body}</div></div>`;
   }
 
@@ -609,6 +642,8 @@ class KshIntercomCard extends HTMLElement {
         H.callService('esphome', `${me.node}_intercom_${t.dataset.act}`, {});
         if (t.dataset.act !== 'answer' || this._c.close_on_call) { this._open = false; this._render(); }
         return;
+      case 'iam': ksSaved(t.dataset.slug); this._click(); this._sig = null; this._render(); return;
+      case 'forget': ksSaved(null); this._sig = null; this._render(); return;
       case 'dnd': if (me && me.dnd) { this._click(); H.callService('switch', 'toggle', { entity_id: me.dnd }); } return;
       default:
     }
@@ -654,6 +689,7 @@ const IC_CSS = `
 .sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
 .tog.on .sw{background:#6366F1}.tog.on .sw::after{transform:translateX(18px)}
 .vol{display:flex;align-items:center;gap:10px;font-size:14px}.vol input{flex:1;accent-color:var(--primary-color);height:28px}.vv{width:42px;text-align:right;color:var(--secondary-text-color)}
+.chg{all:unset;cursor:pointer;color:var(--primary-color);text-decoration:underline}
 .note{font-size:14px;color:var(--secondary-text-color);line-height:1.45}.note code{font-size:13px}
 `;
 if (!customElements.get('ksh-intercom-card')) customElements.define('ksh-intercom-card', KshIntercomCard);

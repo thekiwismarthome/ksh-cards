@@ -3,6 +3,7 @@
 ## 1.2.0 (unreleased)
 
 - **New `ksh-intercom-card`:** a Kiosk Satellite intercom button. The handset-and-waves icon shows this screen's intercom state; tapping it opens a popup listing the other kiosks, and tapping one calls it through Kiosk Satellite's own intercom. The popup also has hang up, answer, decline, do not disturb and volume.
+- The intercom card finds its own screen: it reads the device name from the Kiosk Satellite app, so no `?kiosk=` is needed. Other browsers ask once and remember.
 
 ## 1.1.0
 
