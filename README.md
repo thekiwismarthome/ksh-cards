@@ -24,6 +24,14 @@ The whole weather wall, built from separate KSH cards. Add, remove or rearrange 
 
 Copy it from [`examples/weather-dashboard.yaml`](examples/weather-dashboard.yaml) and change the entity ids to yours.
 
+## Example: home dashboard
+
+Weather, twelve device buttons (with the Kiosk Satellite intercom), this week's calendar and the forecast / rain radar card.
+
+![KSH home dashboard, dark](docs/previews/home-dashboard-dark.png)
+
+Copy it from [`examples/home-dashboard.yaml`](examples/home-dashboard.yaml).
+
 ## Icon cards at a glance
 
 | Dark | Light |

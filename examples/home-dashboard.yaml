@@ -1,0 +1,120 @@
+# KSH home dashboard: weather, twelve device buttons (including the Kiosk Satellite
+# intercom), this week's calendar, and the forecast / rain radar card.
+#
+# One wide section: on a 10" landscape tablet Home Assistant gives it 36 columns.
+#   left (12):  weather now, then the calendar (built-in calendar card, list view)
+#   right (24): twelve KSH icon buttons in two rows of six, then forecast / radar
+# Fits 1280 x 800 with the Home Assistant header hidden.
+#
+# The intercom button needs to know which tablet it's on: open the dashboard from
+# Kiosk Satellite with ?kiosk=<device> in the address (e.g. /ksh-home/home?kiosk=kitchen_tablet).
+#
+# Paste under `views:` in the raw configuration editor and change the entity ids to yours.
+title: Home
+path: home
+icon: mdi:home-outline
+type: sections
+max_columns: 3
+theme: KSH
+sections:
+- type: grid
+  column_span: 3
+  cards:
+  - type: custom:ksh-weather-now-card
+    entity: weather.home
+    feels_like_entity: sensor.feels_like
+    aqi_entity: sensor.air_quality_index
+    warnings_entity: sensor.weather_warnings
+    title: Home
+    grid_options:
+      columns: 12
+      rows: 6
+  - type: custom:ksh-ceiling-light-card
+    entity: light.lounge
+    name: Lounge
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-ceiling-light-card
+    entity: light.play_room
+    name: Play Room
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-heat-pump-card
+    entity: climate.heat_pump
+    name: Heat Pump
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-vacuum-card
+    entity: vacuum.robot
+    name: Robot Vacuum
+    grid_options:
+      columns: 4
+      rows: 3
+    battery_entity: sensor.robot_battery
+  - type: custom:ksh-path-lights-card
+    entity: light.path_lights
+    name: Path Lights
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-intercom-card
+    name: Intercom
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-ceiling-light-card
+    entity: light.bedroom_1
+    name: Bedroom 1
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-bedside-lamp-card
+    entity: light.bedside_lamp
+    name: Bedside Lamp
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-table-lamp-card
+    entity: light.table_lamp
+    name: Table Lamp
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-ceiling-light-card
+    entity: light.bedroom_2
+    name: Bedroom 2
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-nightlight-card
+    entity: light.nightlight
+    name: Nightlight
+    grid_options:
+      columns: 4
+      rows: 3
+  - type: custom:ksh-ev-car-card
+    entity: sensor.car_battery_level
+    name: Car
+    grid_options:
+      columns: 4
+      rows: 3
+    range_entity: sensor.car_range
+    charging_entity: binary_sensor.car_charging
+  - type: calendar
+    initial_view: listWeek
+    entities:
+    - calendar.family
+    - calendar.school
+    - calendar.birthdays
+    grid_options:
+      columns: 12
+      rows: 6
+  - type: custom:ksh-forecast-radar-card
+    entity: weather.home
+    hours: 24
+    grid_options:
+      columns: 24
+      rows: 6
